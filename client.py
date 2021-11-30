@@ -1,3 +1,65 @@
+import time
+import threading
+import math
+import os
+import struct
+import binascii
+import socket
+import random
+
+thread_status = True
+
+
+def keep_alive(client_sock, server_addr, interval):
+    while True:
+        if not thread_status:
+            return
+        client_sock.sendto(str.encode('4'), server_addr)
+        data = client_sock.recv(1500)
+        info = str(data.decode())
+
+        if info == '4':
+            print("Connection is working")
+        else:
+            print("connection ended")
+            break
+        time.sleep(interval)
+
+
+def start_thread(client_sock, server_addr, interval):
+    thread = threading.Thread(target=keep_alive, args=(client_sock, server_addr, interval))
+    thread.daemon = True
+    thread.start()
+    return thread
+
+
+# here ends tread function
+########################################################################################################################
+
+def send_message2(socket, address, msg_type):
+    payload = []
+    
+    if (msg_type == 't'):
+        message = str(input('Napiste spravu, ktoru chcete odoslat: '))
+    elif (msg_type == 'f'):
+        print('Napiste cestu ku suboru: ')
+    
+    fragment = int(input('Zadajte velkost fragmentu: '))
+    while fragment > 1467 or fragment <= 0:
+        print("Maximalna velkost fragmentu je 1467 B")
+        fragment = int(input("Zvolte si inu velkost fragmentu: "))
+    
+    if (msg_type == 't'):
+        fragments = math.ceil(len(message)/fragment)
+        
+        while len(message):
+            message_fragment = str.encode(message[:fragment], 'utf-8')
+            
+            message = message[fragment:]
+            
+        
+            
+
 # this function sends message
 def send_message(client_socket, server_address, file_text):
     message = 0
@@ -10,8 +72,8 @@ def send_message(client_socket, server_address, file_text):
         file_name = input("Input file name: ")
     fragment = int(input("Input fragment size: "))
 
-    while fragment >= 64965 or fragment <= 0:
-        print("Maximum is 64965 B")
+    while fragment > 1467 or fragment <= 0:
+        print("Maximum is 1467 B")
         fragment = int(input("Try to input something different"))
 
     if file_text == "t":
@@ -90,7 +152,7 @@ def send_message(client_socket, server_address, file_text):
 
 
 # this function acts as client
-def client(client_socket, server_address):
+def handle_client(client_socket, server_address):
     global thread_status
     interval = 10
     thread = None
@@ -139,7 +201,36 @@ def client(client_socket, server_address):
             if thread is not None:
                 thread_status = False
                 thread.join()
-            switch_users(client_socket, server_address)
+            return
+            #switch_users(client_socket, server_address)
 
         else:
             print("Try to input something different")
+            
+
+def client_handshake(client_socket, server_address):
+    client_socket.sendto(str.encode("1"), server_address)
+    client_socket.settimeout(60)
+    data, address = client_socket.recvfrom(1500)
+    data = data.decode()
+    if data == "1":
+        print("Connected to address:", server_address)
+        return True
+    
+    return False
+        
+# this logs you as client
+def login():
+    while True:
+        address = input("Input IP address of server (localhost): ")
+        port = input("Input port: ")
+        server_address = (address, int(port))
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            if (client_handshake(client_socket, server_address)):
+                handle_client(client_socket, server_address)
+        except:
+            #print(e)
+            print("Connection not working try again")
+            continue
+            

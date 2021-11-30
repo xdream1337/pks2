@@ -61,53 +61,69 @@ def receive_message(number_of_all_packets, server_socket, file_message):
 
 
 # this functions acts like server
-def server(server_socket, address):
+def handle_server(server_socket, address):
     while True:
-        print("1 for exit")
-        print("2 for switch roles")
-        print("Input anything to continue")
-        choice_server = input()
+        print("1 - for exit")
+        print("2 - for receiving message/file")
+        
+        choice = input()
 
-        if choice_server == '1':
+        if choice == '1':
             return
 
-        if choice_server == "2":
-            switch_users(server_socket, address)
-
-        else:
-            print("Server is running")
+        elif choice == "2":
+            print('Cakam na subor alebo spravu...')
 
         try:
             server_socket.settimeout(60)
 
-            while True:
+            
+            data = server_socket.recv(1500)
+            info = str(data.decode())
 
-                while True:
-                    data = server_socket.recv(1500)
-                    info = str(data.decode())
+            if info == '4':
+                print("Keep alive received, Connection is on")
+                server_socket.sendto(str.encode("4"), address)
+                info = ''
 
-                    if info == '4':
-                        print("Keep alive received, Connection is on")
-                        server_socket.sendto(str.encode("4"), address)
-                        info = ''
-                        break
-                    else:
-                        break
+            typ = info[:1]
+            if typ == '1':  # text message
+                number_of_packets = info[1:]
+                print("Incoming message will consist of " + number_of_packets + " packets")
+                receive_message(number_of_packets, server_socket, "t")
+                break
 
-                typ = info[:1]
-                if typ == '1':  # text message
-                    number_of_packets = info[1:]
-                    print("Incoming message will consist of " + number_of_packets + " packets")
-                    receive_message(number_of_packets, server_socket, "t")
-                    break
-
-                if typ == '2':  # file message
-                    number_of_packets = info[1:]
-                    print("Incoming file will consist of " + number_of_packets + " packets\n")
-                    receive_message(number_of_packets, server_socket, "f")
-                    break
+            if typ == '2':  # file message
+                number_of_packets = info[1:]
+                print("Incoming file will consist of " + number_of_packets + " packets\n")
+                receive_message(number_of_packets, server_socket, "f")
+                break
 
         except socket.timeout:
             print("Client is inactive shutting down")
             server_socket.close()
             return
+        
+def server_handshake(socket):
+    data, address = socket.recvfrom(1500)
+    data = data.decode()
+    
+    if (data == '1'):
+        print("Established connection from address:", address)
+        socket.sendto(str.encode("1"), address)
+        return address, True
+    
+
+# logs you as server
+def server_login():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    port = input("Input port: ")
+    server_socket.bind(("", int(port)))
+    
+    address, handshake_success = server_handshake(server_socket)
+    
+    if (handshake_success):
+        handle_server(server_socket, address)
+    else:
+        print('S klientom sa nepodarilo nadviazat spojenie.')
+        return
