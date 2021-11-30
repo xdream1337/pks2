@@ -37,7 +37,7 @@ def start_thread(client_sock, server_addr, interval):
 # here ends tread function
 ########################################################################################################################
 
-def send_message2(socket, address, msg_type):
+def send_message2(server_socket, server_address, msg_type):
     payload = []
     
     if (msg_type == 't'):
@@ -61,9 +61,10 @@ def send_message2(socket, address, msg_type):
         
         transfer_end = False
         while (not transfer_end):
-            socket.sendto(struct.pack('cHH', "5", len(file_name), crc) + file_name, address)
-            data, address = socket.recvfrom(1500)
-            if (data[:1].decode() == "6"):
+            server_socket.sendto(struct.pack('cHH', "5", len(file_name), crc) + file_name, server_address)
+            data, address = server_socket.recvfrom(1500)
+            data = data.decode()
+            if (data[:1] == "6"):
                 transfer_end = True
         
     
@@ -71,28 +72,31 @@ def send_message2(socket, address, msg_type):
         if (msg_type == 't'):
             message_fragment = str.encode(message[:fragment], 'utf-8')
             
-            crc = utils.crc16(str.encode("3", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
-            header = struct.pack("cHH", str.encode("3"), len(message_fragment), crc)
+            #crc = utils.crc16(str.encode("3", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
+            header = struct.pack("cHH", str.encode("3"), len(message_fragment), 0)
         elif (msg_type == 'f'):
             message_fragment = message[:fragment]
             
-            crc = utils.crc16(str.encode("4", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
+            #crc = utils.crc16(str.encode("4", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
             header = struct.pack("cHH", str.encode("4"), len(message_fragment), crc)
         
         # poslem spravu
-        socket.sendto(header + message_fragment, address)
+        server_socket.sendto(header + message_fragment, server_address)
+        message = message[fragment:]
         
         # check ci sprava prisla v poriadku
-        data, address = socket.recvfrom(1500)
-        
-        if (data[:1].decode() == "6"):
-            message = message[fragment:]
+        """data, address = socket.recvfrom(1500)
+        data = data.decode()
+        if (data[:1] == "6"):
+            message = message[fragment:]"""
 
+    
     transfer_end = False
     while (not transfer_end):
-        socket.sendto(str.encode("9"))        
-        data, address = socket.recvfrom(1500)
-        if (data[:1].decode() == "6"):
+        server_socket.sendto(str.encode("9"), server_address)        
+        data, address = server_socket.recvfrom(1500)
+        data = data.decode()
+        if (data[:1] == "6"):
             transfer_end = True
             
         
@@ -209,14 +213,14 @@ def handle_client(client_socket, server_address):
                 thread_status = False
                 thread.join()
 
-            send_message(client_socket, server_address, "t")
+            send_message2(client_socket, server_address, "t")
 
         elif choice_client == '2':
             if thread is not None:
                 thread_status = False
                 thread.join()
 
-            send_message(client_socket, server_address, "f")
+            send_message2(client_socket, server_address, "f")
 
         elif choice_client == '3':
             thread_status = True
@@ -246,7 +250,7 @@ def client_handshake(client_socket, server_address):
     data, address = client_socket.recvfrom(1500)
     data = data.decode()
     if data == "1":
-        print("Connected to address:", server_address)
+        print("Connected to address:", address)
         return True
     
     return False
@@ -261,8 +265,8 @@ def login():
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             if (client_handshake(client_socket, server_address)):
                 handle_client(client_socket, server_address)
-        except:
-            #print(e)
+        except BaseException as e:
+            print(e)
             print("Connection not working try again")
             continue
             

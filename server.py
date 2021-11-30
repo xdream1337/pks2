@@ -4,55 +4,62 @@ import binascii
 import socket
 import utils
 
-def receive_message_recoded(socket):
+def receive_message_recoded(server_socket):
     full_data = []
     
     while True:
-        data, address = socket.recvfrom(1500)
-        
-        flag, fragment_len, crc = struct.unpack("cHH", data[:6])
-        payload = data[6:]
-        
-        server_crc = utils.crc16(flag + fragment_len + payload)
-        
-        # check ci packet prisiel v poriadku
-        if (server_crc == crc):
-            # prisiel v poriadku, poslem flag 6
-            socket.sendto(str.encode("6"), address)
-        else:
-            # packet prisiel poskodeny
-            socket.sendto(str.encode("7"), address)
-            print("Bol prijaty poskodeny fragment!")
-            continue
-                    
-        #txt sprava
-        if flag == "3":
-            data_type = "msg"
-            full_data.append(payload.decode())
-        #subor
-        elif flag == "4":
-            data_type = "file"
-            full_data.append(payload)
-        # nazov suboru
-        elif flag == "5":
-            file_name = payload.decode()
-        # keep-alive
-        elif flag == "8":
-            print("Obdrzal som keep-alive!")
-        # posledny fragment
-        elif flag == "9":
-            if (data_type == "msg"):
-                print(f"Sprava: {full_data}")
-            elif (data_type == "file"):
-                file = open(file_name, "wb")
+        try:
+            data, address = server_socket.recvfrom(1500)
+            flag, fragment_len, crc = struct.unpack("cHH", data[:6])
+            payload = data[6:]
+            
+            #server_crc = utils.crc16(str.encode(flag) + str.encode(fragment_len) + str.encode(payload))
+            server_crc = 0
+            
+            # check ci packet prisiel v poriadku
+            if (server_crc == crc):
+                # prisiel v poriadku, poslem flag 6
+                server_socket.sendto(str.encode("6"), address)
+            else:
+                # packet prisiel poskodeny
+                server_socket.sendto(str.encode("7"), address)
+                print("Bol prijaty poskodeny fragment!")
+                continue
+                        
+            #txt sprava
+            if flag == "3":
+                data_type = "msg"
+                full_data.append(payload.decode())
+            #subor
+            elif flag == "4":
+                data_type = "file"
+                full_data.append(payload)
+            # nazov suboru
+            elif flag == "5":
+                file_name = payload.decode()
+            # keep-alive
+            elif flag == "8":
+                print("Obdrzal som keep-alive!")
+            # posledny fragment
+            elif flag == "9":
+                if (data_type == "msg"):
+                    print(f"Sprava: {full_data}")
+                elif (data_type == "file"):
+                    file = open(file_name, "wb")
 
-                for data in full_data:
-                    file.write(data)
-                    
-                file.close()
-                size = os.path.getsize(file_name)
-                print("Name:", file_name, "Size:", size, "B")
-                print("Absolute path:", os.path.abspath(file_name))
+                    for data in full_data:
+                        file.write(data)
+                        
+                    file.close()
+                    size = os.path.getsize(file_name)
+                    print("Name:", file_name, "Size:", size, "B")
+                    print("Absolute path:", os.path.abspath(file_name))
+                break
+        
+        except socket.timeout:
+            print("Client is inactive shutting down")
+            server_socket.close()
+            return
 
 
 # this function receives message
@@ -107,7 +114,7 @@ def receive_message(number_of_all_packets, server_socket, file_message):
 
 
 # this functions acts like server
-def handle_server(server_socket, address):
+def handle_server(server_socket):
     while True:
         print("1 - prijimanie spravy/suboru")
         print("2 - zmena roly")
@@ -116,35 +123,11 @@ def handle_server(server_socket, address):
 
         if choice == '1':
             print('Cakam na subor alebo spravu...')
+            receive_message_recoded(server_socket)
         
         elif choice == "2":
             return
 
-        try:
-            
-            data = server_socket.recv(1500)
-            info = str(data.decode())
-
-            if info == '4':
-                print("Keep alive received, Connection is on")
-                server_socket.sendto(str.encode("4"), address)
-                info = ''
-
-            typ = info[:1]
-            if typ == '1':  # text message
-                number_of_packets = info[1:]
-                print("Incoming message will consist of " + number_of_packets + " packets")
-                receive_message(number_of_packets, server_socket, "t")
-
-            if typ == '2':  # file message
-                number_of_packets = info[1:]
-                print("Incoming file will consist of " + number_of_packets + " packets\n")
-                receive_message(number_of_packets, server_socket, "f")
-
-        except socket.timeout:
-            print("Client is inactive shutting down")
-            server_socket.close()
-            return
         
 def server_handshake(socket):
     data, address = socket.recvfrom(1500)
@@ -167,7 +150,7 @@ def server_login():
     address, handshake_success = server_handshake(server_socket)
     
     if (handshake_success):
-        handle_server(server_socket, address)
+        handle_server(server_socket)
     else:
         print('S klientom sa nepodarilo nadviazat spojenie.')
         return
