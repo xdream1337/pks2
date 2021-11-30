@@ -15,9 +15,12 @@ def receive_message_recoded(socket):
         
         server_crc = utils.crc16(flag + fragment_len + payload)
         
+        # check ci packet prisiel v poriadku
         if (server_crc == crc):
+            # prisiel v poriadku, poslem flag 6
             socket.sendto(str.encode("6"), address)
         else:
+            # packet prisiel poskodeny
             socket.sendto(str.encode("7"), address)
             print("Bol prijaty poskodeny fragment!")
             continue

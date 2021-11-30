@@ -6,6 +6,7 @@ import struct
 import binascii
 import socket
 import random
+import utils
 
 thread_status = True
 
@@ -40,22 +41,59 @@ def send_message2(socket, address, msg_type):
     payload = []
     
     if (msg_type == 't'):
-        message = str(input('Napiste spravu, ktoru chcete odoslat: '))
+        message = input('Napiste spravu, ktoru chcete odoslat: ')
     elif (msg_type == 'f'):
-        print('Napiste cestu ku suboru: ')
+        file_name = input('Napiste cestu ku suboru: ')
     
     fragment = int(input('Zadajte velkost fragmentu: '))
     while fragment > 1467 or fragment <= 0:
         print("Maximalna velkost fragmentu je 1467 B")
         fragment = int(input("Zvolte si inu velkost fragmentu: "))
     
-    if (msg_type == 't'):
-        fragments = math.ceil(len(message)/fragment)
+    if (msg_type == 'f'):
+        size = os.path.getsize(file_name)
+        print("File name:", file_name, "Size:", size, "B")
+        print("Absolute path:", os.path.abspath(file_name))
+        file = open(file_name, "rb")
+        message = file.read()
         
-        while len(message):
+        crc = utils.crc16(str.encode("5", 'utf-8') + str.encode(str(len(file_name)), 'utf-8') + str.encode(file_name, 'utf-8'))
+        
+        transfer_end = False
+        while (not transfer_end):
+            socket.sendto(struct.pack('cHH', "5", len(file_name), crc) + file_name, address)
+            data, address = socket.recvfrom(1500)
+            if (data[:1].decode() == "6"):
+                transfer_end = True
+        
+    
+    while len(message):
+        if (msg_type == 't'):
             message_fragment = str.encode(message[:fragment], 'utf-8')
             
+            crc = utils.crc16(str.encode("3", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
+            header = struct.pack("cHH", str.encode("3"), len(message_fragment), crc)
+        elif (msg_type == 'f'):
+            message_fragment = message[:fragment]
+            
+            crc = utils.crc16(str.encode("4", 'utf-8') + str.encode(str(len(message_fragment), 'utf-8')) + str.encode(message_fragment, 'utf-8'))
+            header = struct.pack("cHH", str.encode("4"), len(message_fragment), crc)
+        
+        # poslem spravu
+        socket.sendto(header + message_fragment, address)
+        
+        # check ci sprava prisla v poriadku
+        data, address = socket.recvfrom(1500)
+        
+        if (data[:1].decode() == "6"):
             message = message[fragment:]
+
+    transfer_end = False
+    while (not transfer_end):
+        socket.sendto(str.encode("9"))        
+        data, address = socket.recvfrom(1500)
+        if (data[:1].decode() == "6"):
+            transfer_end = True
             
         
             
@@ -78,12 +116,6 @@ def send_message(client_socket, server_address, file_text):
 
     if file_text == "t":
         number_of_packets = math.ceil(len(message) / fragment)
-
-        print("Number of fragments is:", number_of_packets)
-
-        start_of_communication = ("1" + str(number_of_packets))
-        start_of_communication = start_of_communication.encode('utf-8').strip()
-        client_socket.sendto(start_of_communication, server_address)
 
     if file_text == "f":
         size = os.path.getsize(file_name)
@@ -139,7 +171,7 @@ def send_message(client_socket, server_address, file_text):
             try:
                 client_socket.settimeout(10.0)
                 data = data.decode()
-                if data == "5":
+                if data == "6":
                     packet_number += 1
                     message = message[fragment:]
                 else:
