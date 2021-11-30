@@ -11,7 +11,6 @@ while True:
     print("3 to exit")
     choice = input()
     
-    print("kokotinky")
     if choice == '1':
         client.login()
     elif choice == '2':
